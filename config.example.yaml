@@ -1,0 +1,32 @@
+# wp-shield default configuration
+# Copy to ~/.config/wp-shield/config.yaml and edit as needed.
+
+http:
+  timeout: 15
+  max_concurrency: 10
+  user_agent: "wp-shield/0.1 (+https://github.com/pepperonas/wp-shield)"
+  rotate_user_agent: false
+  respect_robots_txt: true
+  rate_limit_per_second: 5
+  follow_redirects: true
+  verify_ssl: true
+  proxy: null   # e.g. "http://localhost:8080" for Burp/ZAP inspection
+
+scan:
+  default_mode: mixed       # passive | mixed | aggressive
+  enumerate_users: true
+  enumerate_plugins: true
+  enumerate_themes: true
+  check_misconfigurations: true
+  check_config_backups: true
+  match_vulnerabilities: true
+  max_users_to_probe: 50
+  plugin_wordlist_limit: 1500  # aggressive mode
+
+vulndb:
+  source: wordfence         # wordfence | wpvulnerability
+  auto_update_max_age_hours: 24
+
+output:
+  default_format: cli       # cli | json | html | sarif
+  color: auto               # auto | always | never

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+.Python
+build/
+dist/
+*.whl
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Tests / type checkers
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Local state / artifacts
+wp_shield.sqlite
+wp_shield.sqlite-*
+*.log
+/out/
+/tmp/
+.env
+.env.local
