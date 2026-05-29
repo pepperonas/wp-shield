@@ -28,5 +28,11 @@ vulndb:
   auto_update_max_age_hours: 24
 
 output:
-  default_format: cli       # cli | json | html | sarif
+  default_format: cli       # cli | json | html | sarif (live terminal output)
   color: auto               # auto | always | never
+  output_dir: out           # every scan auto-saves into <output_dir>/<timestamp>_<host>/
+  auto_save: true           # disable with --no-save on the CLI
+  auto_save_formats:        # which formats land in out/ automatically
+    - html
+    - json
+    - sarif

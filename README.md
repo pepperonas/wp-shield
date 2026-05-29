@@ -89,42 +89,51 @@ wp-shield update                # default: source=wpvulnerability, plugin_limit=
 # or for Wordfence Intelligence (requires Bearer token):
 # WORDFENCE_API_TOKEN=xxx wp-shield update --source wordfence
 
-# 2) Run a scan
+# 2) Run a scan — auto-saves report.{html,json,sarif,txt} into ./out/<timestamp>_<host>/
 wp-shield scan https://example.com
 
-# 3) Generate a JSON report
-wp-shield scan https://example.com --output json --output-file report.json
+# 3) Same scan but also open the HTML report in your browser when done
+wp-shield scan https://example.com --open
 
-# 4) Generate an HTML report
-wp-shield scan https://example.com --output html --output-file report.html
+# 4) Skip the on-disk artefact (CLI-only)
+wp-shield scan https://example.com --no-save
 
-# 5) Generate a SARIF report for GitHub Code Scanning
-wp-shield scan https://example.com --output sarif --output-file report.sarif
+# 5) Stream JSON to stdout (useful in pipelines)
+wp-shield scan https://example.com --output json --no-save
 
-# 6) Database stats
+# 6) Custom output directory (also configurable via config.yaml)
+wp-shield scan https://example.com --output-dir /var/lib/wp-shield/scans
+
+# 7) Database stats
 wp-shield db stats
 ```
 
-### One-liner: full scan with every output format
+### Auto-save layout
 
-Runs a polite mixed-mode scan and opens the rendered HTML report in your default browser:
+Every scan creates a timestamped subdirectory inside `out/` (or your
+configured `output.output_dir`):
+
+```
+out/
+└── 20260529-185717_wpvulnerability.com/
+    ├── report.txt    # ANSI-stripped Rich CLI snapshot — audit-trail friendly
+    ├── report.html   # standalone styled report (open in browser)
+    ├── report.json   # full Pydantic dump (machine-readable)
+    └── report.sarif  # SARIF 2.1.0 — upload to GitHub Code Scanning
+```
+
+`out/` is in `.gitignore` by default so scan artefacts never get committed.
+
+### One-liner: live demo against a public WordPress site
 
 ```bash
 cd /Users/martin/claude/wp-shield && source .venv/bin/activate && \
-  wp-shield scan https://wpvulnerability.com/ \
-    --mode mixed \
-    --rate-limit 3 \
-    --output cli --output html --output json --output sarif \
-    --output-file /tmp/wp-shield-demo.report && \
-  open /tmp/wp-shield-demo.html
+  wp-shield scan https://wpvulnerability.com/ --mode mixed --rate-limit 3 --open
 ```
 
-What this produces:
-
-- live Rich table in the terminal,
-- `/tmp/wp-shield-demo.html` — standalone, theme-ready report,
-- `/tmp/wp-shield-demo.json` — machine-readable Pydantic dump,
-- `/tmp/wp-shield-demo.sarif` — SARIF 2.1.0 for GitHub Code Scanning.
+This runs a polite mixed-mode scan, prints the live Rich table, writes all
+four report formats into `out/<timestamp>_wpvulnerability.com/`, and opens
+the HTML report in your default browser.
 
 > `wpvulnerability.com/` is used as the demo target because its maintainer publishes the very vulnerability data this tool consumes — it is an explicitly invited test surface. Replace the URL with **any system you own or have written authorization to test**.
 

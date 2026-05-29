@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -58,16 +60,33 @@ def _global_options(
     _configure_logging(verbose)
 
 
+def _safe_host_slug(target_url: str) -> str:
+    """Filesystem-safe slug derived from the target host."""
+    from urllib.parse import urlparse
+    host = urlparse(target_url).hostname or "unknown"
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", host).strip("-") or "unknown"
+
+
+def _build_scan_dir(base: Path, target_url: str, started_at: datetime) -> Path:
+    ts = started_at.strftime("%Y%m%d-%H%M%S")
+    return base / f"{ts}_{_safe_host_slug(target_url)}"
+
+
 @app.command("scan")
 def cmd_scan(
     target: str = typer.Argument(..., help="Target URL, e.g. https://example.com/"),
     mode: ScanMode = typer.Option(ScanMode.MIXED, "--mode", help="Scan intensity."),
     output: list[str] = typer.Option(
-        ["cli"], "--output", "-o", help="Output format(s): cli | json | html | sarif (repeatable)."
+        ["cli"], "--output", "-o", help="Live output format(s): cli | json | html | sarif (repeatable). Independent of auto-save."
     ),
     output_file: Path | None = typer.Option(
-        None, "--output-file", "-f", help="Write non-CLI output here. For multiple formats, suffix is appended."
+        None, "--output-file", "-f", help="Write the live --output to this path (overrides auto-save location for that one format)."
     ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", help="Override the directory where every scan is auto-saved (default: ./out)."
+    ),
+    no_save: bool = typer.Option(False, "--no-save", help="Skip auto-saving HTML+JSON+SARIF to the out directory."),
+    open_html: bool = typer.Option(False, "--open", help="Open the auto-saved HTML report in your default browser when done."),
     no_robots: bool = typer.Option(False, "--no-robots", help="Ignore robots.txt (use only on systems you own)."),
     no_vuln_match: bool = typer.Option(False, "--no-vuln-match", help="Skip vulnerability matching."),
     config: Path | None = typer.Option(None, "--config", "-c", help="Path to YAML config."),
@@ -77,7 +96,13 @@ def cmd_scan(
     rotate_ua: bool = typer.Option(False, "--rotate-user-agent", help="Rotate browser user-agents."),
     proxy: str | None = typer.Option(None, "--proxy", help="HTTP proxy (e.g. http://127.0.0.1:8080)."),
 ) -> None:
-    """Scan a WordPress site."""
+    """Scan a WordPress site.
+
+    By default, every scan auto-saves HTML, JSON and SARIF reports plus a
+    snapshot of the CLI render to ``./out/<timestamp>_<host>/``. The live
+    ``--output`` flag only controls what is shown / streamed in the terminal.
+    Pass ``--no-save`` to disable the on-disk artefact.
+    """
     settings = Settings.load(config)
     if no_robots:
         settings.http.respect_robots_txt = False
@@ -91,6 +116,10 @@ def cmd_scan(
         settings.http.rotate_user_agent = True
     if proxy:
         settings.http.proxy = proxy
+    if output_dir is not None:
+        settings.output.output_dir = output_dir
+    if no_save:
+        settings.output.auto_save = False
 
     store: VulnStore | None = None
     if not no_vuln_match:
@@ -112,20 +141,64 @@ def cmd_scan(
     if "cli" in formats:
         reporter.render_cli(result, console)
 
-    non_cli_formats = [f for f in formats if f != "cli"]
-    multiple_files = len(non_cli_formats) > 1
-    for fmt in non_cli_formats:
+    # --- Explicit --output-file override for the live output --------------
+    explicit_targets = [f for f in formats if f != "cli"]
+    explicit_multi = len(explicit_targets) > 1
+    explicit_paths: dict[str, Path] = {}
+    for fmt in explicit_targets:
         body = reporter.render(result, fmt)
         if body is None:
             continue
         if output_file is None:
+            # No explicit file — the auto-save block below handles persistence.
+            # For non-CLI formats without --output-file we also stream to stdout
+            # to preserve the previous behaviour for pipeline users.
             sys.stdout.write(body + "\n")
             continue
-        # When several non-CLI formats share one --output-file, suffix each one
-        # so we never overwrite. Otherwise honour the caller's path exactly.
-        path = output_file.with_suffix(f".{fmt}") if multiple_files else output_file
+        path = output_file.with_suffix(f".{fmt}") if explicit_multi else output_file
         path.write_text(body, encoding="utf-8")
+        explicit_paths[fmt] = path
         console.print(f"[green]✓[/] Wrote {fmt} report to {path}")
+
+    # --- Auto-save (default behaviour) ------------------------------------
+    if settings.output.auto_save:
+        scan_dir = _build_scan_dir(settings.output.output_dir, result.target.url, result.started_at)
+        scan_dir.mkdir(parents=True, exist_ok=True)
+        saved: dict[str, Path] = {}
+
+        # Snapshot of the live CLI render for the audit trail. We redirect the
+        # rendering console to an in-memory buffer so it doesn't echo a second
+        # time to the real terminal.
+        import io
+        cli_buf = io.StringIO()
+        cli_console = Console(
+            file=cli_buf, record=True, width=120, force_terminal=False, color_system=None,
+        )
+        reporter.render_cli(result, cli_console)
+        (scan_dir / "report.txt").write_text(cli_console.export_text(), encoding="utf-8")
+        saved["txt"] = scan_dir / "report.txt"
+
+        for fmt in settings.output.auto_save_formats:
+            if fmt in explicit_paths:
+                # Caller chose an explicit path; mirror it into out/ for the audit trail.
+                pass
+            body = reporter.render(result, fmt)
+            if body is None:
+                continue
+            path = scan_dir / f"report.{fmt}"
+            path.write_text(body, encoding="utf-8")
+            saved[fmt] = path
+
+        rel = scan_dir
+        try:
+            rel = scan_dir.resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            rel = scan_dir.resolve()
+        console.print(f"[green]✓[/] Saved {len(saved)} report file(s) to [bold]{rel}/[/]")
+
+        if open_html and "html" in saved:
+            import webbrowser
+            webbrowser.open(saved["html"].resolve().as_uri())
 
 
 @app.command("update")

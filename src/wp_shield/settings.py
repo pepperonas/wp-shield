@@ -85,6 +85,9 @@ class VulnDbSettings(BaseModel):
 class OutputSettings(BaseModel):
     default_format: str = "cli"
     color: str = "auto"
+    output_dir: Path = Path("out")
+    auto_save: bool = True
+    auto_save_formats: list[str] = Field(default_factory=lambda: ["html", "json", "sarif"])
 
 
 class Settings(BaseModel):
