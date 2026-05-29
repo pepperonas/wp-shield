@@ -105,6 +105,29 @@ wp-shield scan https://example.com --output sarif --output-file report.sarif
 wp-shield db stats
 ```
 
+### One-liner: full scan with every output format
+
+Runs a polite mixed-mode scan and opens the rendered HTML report in your default browser:
+
+```bash
+cd /Users/martin/claude/wp-shield && source .venv/bin/activate && \
+  wp-shield scan https://wpvulnerability.com/ \
+    --mode mixed \
+    --rate-limit 3 \
+    --output cli --output html --output json --output sarif \
+    --output-file /tmp/wp-shield-demo.report && \
+  open /tmp/wp-shield-demo.html
+```
+
+What this produces:
+
+- live Rich table in the terminal,
+- `/tmp/wp-shield-demo.html` — standalone, theme-ready report,
+- `/tmp/wp-shield-demo.json` — machine-readable Pydantic dump,
+- `/tmp/wp-shield-demo.sarif` — SARIF 2.1.0 for GitHub Code Scanning.
+
+> `wpvulnerability.com/` is used as the demo target because its maintainer publishes the very vulnerability data this tool consumes — it is an explicitly invited test surface. Replace the URL with **any system you own or have written authorization to test**.
+
 ## Detection Modes
 
 `--mode passive` — analyze HTML only (zero "noisy" requests)
